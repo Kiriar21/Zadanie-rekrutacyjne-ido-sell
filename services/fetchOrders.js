@@ -1,82 +1,81 @@
 const axios = require("axios");
 const Order = require("../Models/order");
 const config = require("../config");
-const Math = require("math");
 
 async function fetchOrders() {
     try {
         console.log("🔹 Pobieranie zamówień z IdoSell API...");
 
-        
-        const initialResponse = await axios.get(`${config.API_URL}`, {
-            headers: {
-                accept: 'application/json',
-                'X-API-KEY': `${config.API_KEY}`
-            }
-        });
+        let currentPage = 1;
+        let totalPages = 1;
 
-        if (!initialResponse.data || !initialResponse.data.Results || !initialResponse.data.resultsNumberAll) {
-            console.error("❌ Brak zamówień w odpowiedzi API.");
-            return;
-        }
+        while (currentPage <= totalPages) {
+            console.log(`🔹 Pobieranie zamówień z strony ${currentPage}...`);
 
-        const totalOrders = initialResponse.data.resultsNumberAll;
-        const totalPages = Math.ceil(totalOrders / 100); 
-
-        console.log(`🔹 Znalazłem ${totalOrders} zamówień, które są podzielone na ${totalPages} stron.`);
-
-        
-        for (let page = 1; page <= totalPages; page++) {
-            console.log(`🔹 Pobieranie zamówień z strony ${page}...`);
-
-            const response = await axios.get(`${config.API_URL}&page=${page}`, {
+            const url = `${config.API_URL}?resultsPage=${currentPage}`;
+            const response = await axios.get(url, {
                 headers: {
-                    accept: 'application/json',
-                    'X-API-KEY': `${config.API_KEY}`
+                    'Content-Type': 'application/json',
+                    'X-API-KEY': config.API_KEY
                 }
             });
 
-            if (!response.data || !response.data.Results) {
-                console.error("❌ Brak zamówień w odpowiedzi API.");
-                continue; 
+            const results = response.data?.Results;
+            if (!results || results.length === 0) {
+                console.log(`❌ Brak zamówień na stronie ${currentPage}.`);
+                break;
             }
 
-            const ordersData = response.data.Results.map(order => {
-                const products = Array.isArray(order.orderDetails.productsResults) ? order.orderDetails.productsResults.map(prod => ({
-                    productID: prod.productId, 
-                    quantity: prod.productQuantity,   
-                })) : [];
+            if (currentPage === 1) {
+                const totalOrders = response.data.resultsNumberAll;
+                const resultsPerPage = results.length;
+                totalPages = Math.ceil(totalOrders / resultsPerPage);
+                console.log(`🔹 Znalazłem ${totalOrders} zamówień, podzielonych na ${totalPages} stron.`);
+            }
 
-                return {
-                    orderID: order.orderSerialNumber,  
-                    products: products,      
-                    orderWorth: order.orderDetails.payments.orderCurrency.orderProductsCost,  
+            for (const order of results) {
+                const products = Array.isArray(order.orderDetails?.productsResults)
+                    ? order.orderDetails.productsResults.map(prod => ({
+                          productID: prod.productId,
+                          quantity: prod.productQuantity,
+                      })).sort((a, b) => a.productID - b.productID) // Sortowanie produktów
+                    : [];
+
+                const newOrderData = {
+                    orderID: order.orderSerialNumber,
+                    products: products,
+                    orderWorth: parseFloat(order.orderDetails?.payments?.orderCurrency?.orderProductsCost) || 0,
                 };
-            });
 
-            
-            for (const order of ordersData) {
-                const existingOrder = await Order.findOne({ orderID: order.orderID });
+                const existingOrder = await Order.findOne({ orderID: newOrderData.orderID });
 
-                if (existingOrder) {
-                    
-                    if (JSON.stringify(existingOrder.products) !== JSON.stringify(order.products) || existingOrder.orderWorth !== order.orderWorth) {
-                        await Order.updateOne({ orderID: order.orderID }, { $set: order });
-                    } 
+                if (!existingOrder) {
+                    console.log(`➕ Dodanie nowego zamówienia ${newOrderData.orderID}.`);
+                    await Order.create(newOrderData);
                 } else {
-                    
-                    console.log(`➕ Dodanie nowego zamówienia ${order.orderID}.`);
-                    await Order.create(order);
+                    const existingOrderData = {
+                        orderID: existingOrder.orderID,
+                        products: existingOrder.products.sort((a, b) => a.productID - b.productID), // Sortowanie dla porównania
+                        orderWorth: parseFloat(existingOrder.orderWorth),
+                    };
+
+                    if (
+                        JSON.stringify(existingOrderData.products) !== JSON.stringify(newOrderData.products) ||
+                        existingOrderData.orderWorth !== newOrderData.orderWorth
+                    ) {
+                        console.log(`✏️ Aktualizacja zmienionego zamówienia ${newOrderData.orderID}.`);
+                        await Order.updateOne({ orderID: newOrderData.orderID }, { $set: newOrderData });
+                    }
                 }
             }
 
-            console.log(`✅ Zamówienia z strony ${page} zapisane w bazie.`);
+            console.log(`✅ Zamówienia z strony ${currentPage} zapisane w bazie.`);
+            currentPage++;
         }
 
-        console.log("✅ Wszystkie zamówienia zapisane.");
-
+        console.log("✅ Wszystkie zamówienia zostały zapisane.");
     } catch (error) {
-        console.error("❌ Błąd pobierania zamówień:", error.message);
+        console.error("❌ Błąd podczas pobierania zamówień:", error.message);
     }
 }
 
