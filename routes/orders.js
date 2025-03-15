@@ -18,6 +18,9 @@ router.post("/fetch", auth, async (req, res) => {
 
 router.get("/", auth, async (req, res) => {
     const { minWorth, maxWorth } = req.query;
+
+    if(minWorth > maxWorth) return res.status(400).json({ message: "Wartość minimalna nie może być większa od wartości maksymalnej" });
+
     let filter = {};
 
     if (minWorth) filter.orderWorth = { $gte: parseFloat(minWorth) };

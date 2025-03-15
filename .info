@@ -1,0 +1,11 @@
+Po pobraniu:
+npm i 
+
+Uruchomienie
+npm start
+
+REST API
+Pobieranie wszystkich zamowien do csv - http://localhost:3000/api/orders/export/csv
+Pobieranie jednego zamówienie - http://localhost:3000/api/orders/:id
+Pobieranie wszystkich zamówień - http://localhost:3000/api/orders/
+Pobieranie zamówień z przedziału - http://localhost:3000/api/orders?minWorth=MIN&maxWorth=MAX
