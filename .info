@@ -1,8 +1,10 @@
 Po pobraniu:
-npm i 
+W konsoli: npm i 
+Kopiujemy config copy.js i ustawiamy nazwe config.js
+w config.js ustawiamy API_KEY na swój API_KEY
 
 Uruchomienie
-npm start
+W konsoli: npm start
 
 REST API
 Pobieranie wszystkich zamowien do csv - http://localhost:3000/api/orders/export/csv
